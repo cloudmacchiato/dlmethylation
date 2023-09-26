@@ -1,6 +1,5 @@
 # dlmethylation
 
 The data can be accessed in the following ways:
-  https://github.com/DMCB-GIST/PINNet/tree/main/data
-  or
-  /ihome/hpark/laz64/meth_path/PINNet/data
+https://pitt-my.sharepoint.com/:f:/g/personal/laz64_pitt_edu/EmZMZY8khwhMquTDCIR2YCIB_vfep4CsM8xCkV2dyE8JcQ?e=qMRIY0
+  
