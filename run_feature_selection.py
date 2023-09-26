@@ -17,7 +17,7 @@ stds = [[],[],[],[],[],[]]
 best_n = [0,0,0,0,0]
 best = [0,0,0,0,0]
 ls_names = ["AUC","Precision","Recall","Accuracy","F1"]
-for n_features in range(0,8900,25):
+for n_features in range(0,20490,50):
     try:
         fsArgs = {}
         fsArgs['x_data'] = expression[:,fi.head(n_features).index.tolist()]

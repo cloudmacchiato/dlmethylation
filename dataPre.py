@@ -22,9 +22,8 @@ def preprocessing (path, tissue):
     print("num_pathway : ",pathway_info.shape[0])
 
     ### expression datasets
-    print(">> Expression Data :",tissue)
-    if (tissue == "brain"):
-        data = pd.read_csv("./data/brain_expression.csv", header=0)
+    print(">> Methylation Data: gene.average.beta.by.intensity.csv")
+    data = pd.read_csv("./data/gene.average.beta.by.intensity.csv", header=0)
 
     expression = data.iloc[:,1:]
     features = data.iloc[:,0].tolist()
@@ -42,19 +41,20 @@ def preprocessing (path, tissue):
     print("sample_dim : ",sample_dim)
     print("input_size (number of genes): ",input_dim)
     
-    if (tissue == "brain"):
-        status = np.append(np.zeros((157)),np.ones((310)),axis = 0)
-        status = status.reshape(467,1)
+    pheno = pd.read_table("./data/asthma_phenotype.txt",sep = ' ',index_col=0)
+    pheno['label'] = pheno['label'].map({'Nonasthmatic': 0, 'Asthmatic': 1})
+    status = np.array(pheno['label']).reshape(-1,1)
+
 
     patient = list(data.iloc[:,1:].columns.values.tolist()) 
-    print("patient list : ",patient[1:6])
-    print("feature list : ",features[1:6])
+    print("patient list : ",patient[0:6])
+    print("feature list : ",features[0:6])
     
     return pathway_info, expression, status, features
 
 
-pathway = "KEGG"
-tissue = "brain"
+pathway = "GO"
+tissue = "Asthma"
 pathway_info, expression, status, features = preprocessing(pathway, tissue)
 
 trainArgs = {}

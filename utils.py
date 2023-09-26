@@ -5,7 +5,7 @@ from torch import nn
 from torch.utils.data import Dataset
 
 class EarlyStopping:
-    def __init__(self, patience=10, verbose=False, delta=0, path='checkpoint.pt'):
+    def __init__(self, patience=20, verbose=False, delta=0, path='checkpoint.pt'):
         self.patience = patience
         self.verbose = verbose
         self.counter = 0

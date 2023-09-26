@@ -12,4 +12,4 @@ from train import *
 train = train_kfold2(trainArgs)
 result = train.kfold()
 
-result.to_csv("result2.csv")
+result.to_csv("result2_gobp.csv")
