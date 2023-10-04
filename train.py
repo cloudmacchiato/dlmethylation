@@ -452,7 +452,7 @@ class train_kfold2:
                 for num_fc in num_fc_list:
                     val_auc_list = []
                     test_auc_list = []
-                    self.model = PINNet2(input_dim,pathway_info,num_fc)
+                    self.model = PINNet(input_dim,pathway_info,num_fc)
                     self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay = 0)
                     self.criterion = nn.CrossEntropyLoss()
                     self.model = self.model.to(self.device)
