@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 def preprocessing (path, tissue):
     ### pathway datasets
     if (path == "GO"):
-        pathway = pd.read_csv("./data/pathway_go_bp.csv", header=0)
+        pathway = pd.read_csv("../../data/pathway_gobp.csv", header=0)
     elif (path == "KEGG"):
         pathway = pd.read_csv("../../data/pathway_kegg.csv", header=0)       
     print(">> Pathway Data :",path)
@@ -52,7 +52,7 @@ def preprocessing (path, tissue):
     return pathway_info, expression, status, features
 
 
-pathway = "KEGG"
+pathway = "GO"
 tissue = "ipf"
 pathway_info, expression, status, features = preprocessing(pathway, tissue)
 
