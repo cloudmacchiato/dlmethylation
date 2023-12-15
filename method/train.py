@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from sklearn import metrics
 from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.metrics import precision_recall_curve
 from statistics import mean 
 from imblearn.over_sampling import SMOTE
@@ -480,7 +480,7 @@ class train_kfold2:
                             y_prob.extend(prob.detach().cpu().numpy())
                             y_true.extend(true.cpu().numpy())
 
-                        val_auc, _, _, _ = self.evalutaion(y_true,y_prob)
+                        val_auc, _, _, _, _ = self.evalutaion(y_true,y_prob)
 
                         early_stopping(val_auc, self.model, epoch)
                         if early_stopping.early_stop:
@@ -494,7 +494,7 @@ class train_kfold2:
                         y_prob.extend(prob.detach().cpu().numpy())
                         y_true.extend(true.cpu().numpy())
 
-                    val_auc, val_precision, val_recall, val_f1 = self.evalutaion(y_true,y_prob)
+                    val_auc, val_precision, val_recall, val_f1, _ = self.evalutaion(y_true,y_prob)
                  
                     
                     if val_auc > best_val_auc:
@@ -508,13 +508,13 @@ class train_kfold2:
                         y_prob.extend(prob.detach().cpu().numpy())
                         y_true.extend(true.cpu().numpy())
 
-                    test_auc, test_precision, test_recall, test_f1 = self.evalutaion(y_true,y_prob)
+                    test_auc, test_precision, test_recall, test_f1, test_pr_auc = self.evalutaion(y_true,y_prob)
                     
                     result = pd.concat([result, pd.DataFrame({'hyperparam': ["lr:{} / num_fc:{}".format(str(lr),str(num_fc))],'Fold':[fold],
                                             'Valid_AUC': [val_auc], 'Valid_Precision': [val_precision], 
                                             'Valid_Recall': [val_recall], 'Valid_F1': [val_f1],
                                             'Test_AUC': [test_auc], 'Test_Precision': [test_precision], 
-                                            'Test_Recall': [test_recall], 'Test_F1': [test_f1]})], ignore_index=True)
+                                            'Test_Recall': [test_recall], 'Test_F1': [test_f1], 'Test_PrAUC': [test_pr_auc]})], ignore_index=True)
                     
                     ##SHAP
                     shap_values = self.get_shap_values(x_train, x_test)
@@ -551,13 +551,14 @@ class train_kfold2:
     def evalutaion(self, y_true, y_prob):
         np.seterr(divide='ignore', invalid='ignore')
         auc = roc_auc_score(y_true,y_prob)
+        pr_auc = average_precision_score(y_true,y_prob)
         precision,recall,_ = precision_recall_curve(y_true,y_prob)
         f1 = (2*precision*recall)/(precision+recall)
         idx = np.nanargmax(f1)
         pr = precision[idx] 
         rc = recall[idx] 
         f1 = f1[idx] 
-        return auc, pr, rc, f1
+        return auc, pr, rc, f1, pr_auc
 
     def seed_worker(self, random_seed):
         torch.manual_seed(random_seed)
@@ -659,7 +660,7 @@ class train_kfold_mlp:
                             y_prob.extend(prob.detach().cpu().numpy())
                             y_true.extend(true.cpu().numpy())
 
-                        val_auc, _, _, _ = self.evalutaion(y_true,y_prob)
+                        val_auc, _, _, _, _ = self.evalutaion(y_true,y_prob)
 
                         early_stopping(val_auc, self.model, epoch)
                         if early_stopping.early_stop:
@@ -673,7 +674,7 @@ class train_kfold_mlp:
                         y_prob.extend(prob.detach().cpu().numpy())
                         y_true.extend(true.cpu().numpy())
 
-                    val_auc, val_precision, val_recall, val_f1 = self.evalutaion(y_true,y_prob)
+                    val_auc, val_precision, val_recall, val_f1, _ = self.evalutaion(y_true,y_prob)
                  
                     
                     if val_auc > best_val_auc:
@@ -687,13 +688,13 @@ class train_kfold_mlp:
                         y_prob.extend(prob.detach().cpu().numpy())
                         y_true.extend(true.cpu().numpy())
 
-                    test_auc, test_precision, test_recall, test_f1 = self.evalutaion(y_true,y_prob)
+                    test_auc, test_precision, test_recall, test_f1, test_pr_auc = self.evalutaion(y_true,y_prob)
                     
                     result = pd.concat([result, pd.DataFrame({'hyperparam': ["lr:{} / num_fc:{}".format(str(lr),str(num_fc))],'Fold':[fold],
                                             'Valid_AUC': [val_auc], 'Valid_Precision': [val_precision], 
                                             'Valid_Recall': [val_recall], 'Valid_F1': [val_f1],
                                             'Test_AUC': [test_auc], 'Test_Precision': [test_precision], 
-                                            'Test_Recall': [test_recall], 'Test_F1': [test_f1]})], ignore_index=True)
+                                            'Test_Recall': [test_recall], 'Test_F1': [test_f1], 'Test_PrAUC': [test_pr_auc]})], ignore_index=True)
         
         return result
     
@@ -724,13 +725,14 @@ class train_kfold_mlp:
     def evalutaion(self, y_true, y_prob):
         np.seterr(divide='ignore', invalid='ignore')
         auc = roc_auc_score(y_true,y_prob)
+        pr_auc = average_precision_score(y_true,y_prob)
         precision,recall,_ = precision_recall_curve(y_true,y_prob)
         f1 = (2*precision*recall)/(precision+recall)
         idx = np.nanargmax(f1)
         pr = precision[idx] 
         rc = recall[idx] 
         f1 = f1[idx] 
-        return auc, pr, rc, f1
+        return auc, pr, rc, f1, pr_auc
 
     def seed_worker(self, random_seed):
         torch.manual_seed(random_seed)

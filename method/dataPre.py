@@ -52,8 +52,8 @@ def preprocessing (path, tissue):
     return pathway_info, expression, status, features
 
 
-pathway = "GO"
-tissue = "ipf"
+pathway = "KEGG"
+tissue = "brca"
 pathway_info, expression, status, features = preprocessing(pathway, tissue)
 
 trainArgs = {}
