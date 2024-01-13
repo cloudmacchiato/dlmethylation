@@ -15,7 +15,7 @@ trainArgs['y_data'] = status
 trainArgs['pathway_info'] = pathway_info
 trainArgs['features'] = features
 trainArgs['num_fc_list'] = [32]
-trainArgs['lr_list'] = [0.0005]
+trainArgs['lr_list'] = [0.001]
 #trainArgs['num_fc_list'] = [32]
 #trainArgs['lr_list'] = [0.0001]
 trainArgs['device'] = '0'
@@ -30,4 +30,4 @@ result,fi = train.kfold()
 result.to_csv(trainArgs['filename'], mode='w')
 fi['mean'] = fi.iloc[:, 1:10].mean(axis=1)
 fi = fi.sort_values(by="mean", ascending=False)
-fi.to_csv("../../results/GO/feature_importance_result.csv")
+fi.to_csv("../../results/KEGG/feature_importance_result.csv")

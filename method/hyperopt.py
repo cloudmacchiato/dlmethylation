@@ -26,4 +26,4 @@ trainArgs['filename'] = 'result.csv'
 
 train = train_kfold(trainArgs)
 result = train.kfold()
-result.to_csv("result_GO.csv")
+result.to_csv("../../results/GOBP/params.csv")

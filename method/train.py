@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from sklearn import metrics
+from sklearn.feature_selection import mutual_info_classif
 from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, average_precision_score
@@ -107,7 +108,7 @@ class train_kfold:
                                 y_true.extend(true.cpu().numpy())
 
                             val_auc, _, _, _ = self.evalutaion(y_true,y_prob)
-
+                            print(val_auc)
                             early_stopping(val_auc, self.model, epoch)
                             if early_stopping.early_stop:
                                 break
@@ -447,11 +448,11 @@ class train_kfold2:
             
             smote = SMOTE(random_state=random_seed)
             x_train, y_train = smote.fit_resample(x_train,y_train)
-            y_train = y_train.reshape(-1,1)                              
-
+            y_train = y_train.reshape(-1,1)  
+            
             train_dataset = CustomDataset(x_train,y_train)
             val_dataset = CustomDataset(x_val,y_val)
-            test_dataset = CustomDataset(x_test,y_test) 
+            test_dataset = CustomDataset(x_test,y_test)  
                        
             train_loader = DataLoader(dataset = train_dataset, batch_size = 64, shuffle = True)
             val_loader = DataLoader(dataset = val_dataset, batch_size = 64, shuffle = False)
@@ -909,3 +910,206 @@ class train_kfold3:
         torch.backends.cudnn.benchmark = False
         np.random.seed(random_seed)
         random.seed(random_seed)
+        
+class train_kfold3:
+    def __init__(self, trainArgs):
+   
+        """
+        args:
+            x_data          : Matrix data with gene features and methylation
+            y_data          : patient label
+            pathway_info    : pathway matrics
+            num_fc_list     : number of fully connected nodes 
+            lr_list         : learning rate
+            device          : GPU device
+        Returns:
+            AUC, Precision, Recall, F1
+        """
+        self.trainArgs = trainArgs
+        self.seed_worker(trainArgs['seed'])
+        os.environ["CUDA_VISIBLE_DEVICES"]=trainArgs['device']
+        self.device = torch.device('cuda')
+        directory = './CV_best_model'
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+    def kfold(self):
+        trainArgs = self.trainArgs
+        x_data = trainArgs['x_data']
+        y_data = trainArgs['y_data']
+
+        pathway_info = trainArgs['pathway_info'].to(self.device)
+        num_pathway = pathway_info.shape[0]
+        input_size_gene = pathway_info.shape[1]
+        input_size_meth = x_data.shape[1] - input_size_gene
+        num_fc_list = trainArgs['num_fc_list']
+        lr_list = trainArgs['lr_list']
+        random_seed = trainArgs['seed']
+
+        kfold = StratifiedKFold(n_splits = 5, shuffle=True, random_state = random_seed)
+        
+        result = pd.DataFrame(columns=['hyperparam','Fold', 'Valid_AUC','Valid_Precision','Valid_Recall','Valid_F1',
+                                       'Test_AUC','Test_Precision','Test_Recall','Test_F1'])   
+        shap_ls = []
+        x_tests = []
+        sel_feat_idx = {}
+        for fold, (train_index, test_index) in enumerate(kfold.split(x_data, y_data)):   
+            print('****************************************************************************')
+            print('Fold {} / {}'.format(fold + 1 , kfold.get_n_splits()))
+            print('****************************************************************************')
+            x_train_ = x_data[train_index]
+            y_train_ = y_data[train_index] 
+            x_test = x_data[test_index]  
+            y_test = y_data[test_index] 
+            x_train, x_val, y_train, y_val = train_test_split(x_train_, y_train_, 
+                                                              test_size=1/9, random_state = random_seed, stratify = y_train_)
+            
+            smote = SMOTE(random_state=random_seed)
+            x_train, y_train = smote.fit_resample(x_train,y_train)
+            y_train = y_train.reshape(-1,1)                              
+
+            print("MI feature selection...")
+            if os.path.exists("mi_feat_idx.pkl"):
+                with open("mi_feat_idx.pkl", 'rb') as file:
+                    sel_feat_idx = pickle.load(file)
+                    kept_indice = sel_feat_idx[f'fold{fold}']
+            else:
+                mutual_info = list(mutual_info_classif(x_train[:,input_size_gene:], y_train))
+                kept_meth = sorted(range(len(mutual_info)), key=lambda i: mutual_info[i], reverse=True)[:20000]
+                all_indice = [i for i in range(input_size_gene+input_size_meth)]
+                kept_indice = all_indice[slice(0,input_size_gene)] + [all_indice[i+input_size_gene] for i in kept_meth]
+                sel_feat_idx.update({f'fold{fold}': kept_indice})
+            
+            train_dataset = CustomDataset(x_train[:,kept_indice],y_train)
+            val_dataset = CustomDataset(x_val[:,kept_indice],y_val)
+            test_dataset = CustomDataset(x_test[:,kept_indice],y_test) 
+                       
+            train_loader = DataLoader(dataset = train_dataset, batch_size = 64, shuffle = True)
+            val_loader = DataLoader(dataset = val_dataset, batch_size = 64, shuffle = False)
+            test_loader = DataLoader(dataset = test_dataset, batch_size = 64, shuffle = False)            
+                   
+            best_val_auc = 0
+            for  lr in lr_list:
+                for num_fc in num_fc_list:
+                    val_auc_list = []
+                    test_auc_list = []
+                    self.model = PINNet3(input_size_gene,20000,pathway_info,num_fc)
+                    self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay = 0)
+                    self.criterion = nn.CrossEntropyLoss()
+                    self.model = self.model.to(self.device)
+                    early_stopping = EarlyStopping(patience=10, verbose = True, path = 'checkpoint_ES.pt')
+                   
+                    ##train 
+                    for epoch in range(0, 200):
+                        for batch_idx, samples in enumerate(train_loader):
+                            _,_ = self.train_step(samples,training = True, num_gene = input_size_gene)
+                        ##early stopping
+                        y_prob, y_true = [],[]
+                        for batch_idx, samples in enumerate(val_loader):
+                            prob, true = self.train_step(samples,training = False, num_gene = input_size_gene)
+
+                            y_prob.extend(prob.detach().cpu().numpy())
+                            y_true.extend(true.cpu().numpy())
+
+                        val_auc, _, _, _, _ = self.evalutaion(y_true,y_prob)
+
+                        early_stopping(val_auc, self.model, epoch)
+                        if early_stopping.early_stop:
+                            break
+                            
+                    ##validation 
+                    self.model = torch.load('checkpoint_ES.pt')
+                    y_prob, y_true = [],[]
+                    for batch_idx, samples in enumerate(val_loader):     
+                        prob, true = self.train_step(samples,training = False, num_gene = input_size_gene)
+                        y_prob.extend(prob.detach().cpu().numpy())
+                        y_true.extend(true.cpu().numpy())
+
+                    val_auc, val_precision, val_recall, val_f1, _ = self.evalutaion(y_true,y_prob)
+                 
+                    
+                    if val_auc > best_val_auc:
+                        best_val_auc = val_auc 
+
+                    ##test
+                    y_prob, y_true = [],[]
+                    for batch_idx, samples in enumerate(test_loader):     
+                        prob, true = self.train_step(samples,training = False, num_gene = input_size_gene)
+
+                        y_prob.extend(prob.detach().cpu().numpy())
+                        y_true.extend(true.cpu().numpy())
+
+                    test_auc, test_precision, test_recall, test_f1, test_pr_auc = self.evalutaion(y_true,y_prob)
+                    
+                    result = pd.concat([result, pd.DataFrame({'hyperparam': ["lr:{} / num_fc:{}".format(str(lr),str(num_fc))],'Fold':[fold],
+                                            'Valid_AUC': [val_auc], 'Valid_Precision': [val_precision], 
+                                            'Valid_Recall': [val_recall], 'Valid_F1': [val_f1],
+                                            'Test_AUC': [test_auc], 'Test_Precision': [test_precision], 
+                                            'Test_Recall': [test_recall], 'Test_F1': [test_f1], 'Test_PrAUC': [test_pr_auc]})], ignore_index=True)
+                    
+                    ##SHAP
+                    shap_values = self.get_shap_values(x_train[:,kept_indice], x_test[:,kept_indice],num_gene=input_size_gene)
+                    shap_ls.append(shap_values)
+                    x_tests.append(x_test)
+        with open("shap.pkl", 'wb') as file:
+            pickle.dump(shap_ls, file)
+        with open("mi_feat_idx.pkl", 'wb') as file:
+            pickle.dump(sel_feat_idx, file)
+        return result
+        
+    def train_step(self, batch_item, training,num_gene):
+        data,label = batch_item
+        data = data.to(self.device)
+        input_gene = data[:,:num_gene]
+        input_meth = data[:,num_gene:]
+        label = label.to(self.device)
+        if training is True:
+            self.model.train()
+            self.optimizer.zero_grad()
+            with torch.cuda.amp.autocast():
+                out = self.model(input_gene,input_meth)
+                true = torch.reshape(label,(-1,))
+                loss = self.criterion(out,true)
+                prob = out[:,1]                
+                
+            loss.backward()
+            self.optimizer.step()
+            return prob, true
+        else:
+            self.model.eval()
+            with torch.no_grad():
+                out = self.model(input_gene,input_meth)
+                true = torch.reshape(label,(-1,))
+                prob = out[:,1]   
+            return prob, true  
+        
+    def evalutaion(self, y_true, y_prob):
+        np.seterr(divide='ignore', invalid='ignore')
+        auc = roc_auc_score(y_true,y_prob)
+        pr_auc = average_precision_score(y_true,y_prob)
+        precision,recall,_ = precision_recall_curve(y_true,y_prob)
+        f1 = (2*precision*recall)/(precision+recall)
+        idx = np.nanargmax(f1)
+        pr = precision[idx] 
+        rc = recall[idx] 
+        f1 = f1[idx] 
+        return auc, pr, rc, f1, pr_auc
+
+    def seed_worker(self, random_seed):
+        torch.manual_seed(random_seed)
+        torch.cuda.manual_seed(random_seed)
+        torch.cuda.manual_seed_all(random_seed)  # if use multi-GPU
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        np.random.seed(random_seed)
+        random.seed(random_seed)
+        
+    def get_shap_values(self, x_train, x_val, num_gene):
+            self.model.eval()
+            input_gene = torch.tensor(x_train[:,:num_gene], dtype=torch.float32).to(self.device)
+            input_meth = torch.tensor(x_train[:,num_gene:], dtype=torch.float32).to(self.device)
+            input_gene_val = torch.tensor(x_val[:,:num_gene], dtype=torch.float32).to(self.device)
+            input_meth_val = torch.tensor(x_val[:,num_gene:], dtype=torch.float32).to(self.device)
+            explainer = shap.GradientExplainer((self.model, self.model.fc2), [input_gene,input_meth])
+            shap_values = explainer.shap_values([input_gene_val, input_meth_val])
+            return shap_values

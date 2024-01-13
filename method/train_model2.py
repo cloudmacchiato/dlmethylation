@@ -16,7 +16,7 @@ trainArgs['y_data'] = status
 trainArgs['pathway_info'] = pathway_info
 trainArgs['features'] = features
 trainArgs['num_fc_list'] = [32]
-trainArgs['lr_list'] = [0.0005]
+trainArgs['lr_list'] = [0.001]
 #trainArgs['num_fc_list'] = [32]
 #trainArgs['lr_list'] = [0.0001]
 trainArgs['device'] = '0'
@@ -28,4 +28,4 @@ trainArgs['filename'] = 'result.csv'
 train = train_kfold2(trainArgs)
 result = train.kfold()
 
-result.to_csv("../../results/KEGG/result2.csv")
+result.to_csv("../../results/GOBP/result2.csv")
