@@ -937,11 +937,8 @@ class train_kfold3:
         trainArgs = self.trainArgs
         x_data = trainArgs['x_data']
         y_data = trainArgs['y_data']
-
-        pathway_info = trainArgs['pathway_info'].to(self.device)
-        num_pathway = pathway_info.shape[0]
-        input_size_gene = pathway_info.shape[1]
-        input_size_meth = x_data.shape[1] - input_size_gene
+        pathway_info = trainArgs['pathway_info']
+        sel_feat_num = trainArgs['sel_feat_num']
         num_fc_list = trainArgs['num_fc_list']
         lr_list = trainArgs['lr_list']
         random_seed = trainArgs['seed']
@@ -968,21 +965,22 @@ class train_kfold3:
             x_train, y_train = smote.fit_resample(x_train,y_train)
             y_train = y_train.reshape(-1,1)                              
 
-            print("MI feature selection...")
             if os.path.exists("mi_feat_idx.pkl"):
                 with open("mi_feat_idx.pkl", 'rb') as file:
                     sel_feat_idx = pickle.load(file)
-                    kept_indice = sel_feat_idx[f'fold{fold}']
+                    kept_indice1 = sel_feat_idx[f'fold{fold}'][0]
+                    kept_indice2 = sel_feat_idx[f'fold{fold}'][1]
             else:
-                mutual_info = list(mutual_info_classif(x_train[:,input_size_gene:], y_train))
-                kept_meth = sorted(range(len(mutual_info)), key=lambda i: mutual_info[i], reverse=True)[:20000]
-                all_indice = [i for i in range(input_size_gene+input_size_meth)]
-                kept_indice = all_indice[slice(0,input_size_gene)] + [all_indice[i+input_size_gene] for i in kept_meth]
-                sel_feat_idx.update({f'fold{fold}': kept_indice})
+                print("Run feature selection first!")
             
-            train_dataset = CustomDataset(x_train[:,kept_indice],y_train)
-            val_dataset = CustomDataset(x_val[:,kept_indice],y_val)
-            test_dataset = CustomDataset(x_test[:,kept_indice],y_test) 
+            pathway_info_input = pathway_info[:,kept_indice2]
+            pathway_info_input = pathway_info_input.to(self.device)
+            input_size_gene = len(kept_indice2)
+            input_size_meth = sel_feat_num
+            
+            train_dataset = CustomDataset(x_train[:,kept_indice1],y_train)
+            val_dataset = CustomDataset(x_val[:,kept_indice1],y_val)
+            test_dataset = CustomDataset(x_test[:,kept_indice1],y_test) 
                        
             train_loader = DataLoader(dataset = train_dataset, batch_size = 64, shuffle = True)
             val_loader = DataLoader(dataset = val_dataset, batch_size = 64, shuffle = False)
@@ -993,7 +991,7 @@ class train_kfold3:
                 for num_fc in num_fc_list:
                     val_auc_list = []
                     test_auc_list = []
-                    self.model = PINNet3(input_size_gene,20000,pathway_info,num_fc)
+                    self.model = PINNet3(input_size_gene,50000,pathway_info_input,num_fc)
                     self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay = 0)
                     self.criterion = nn.CrossEntropyLoss()
                     self.model = self.model.to(self.device)
@@ -1002,15 +1000,18 @@ class train_kfold3:
                     ##train 
                     for epoch in range(0, 200):
                         for batch_idx, samples in enumerate(train_loader):
+                            #print(samples[0].shape)
                             _,_ = self.train_step(samples,training = True, num_gene = input_size_gene)
                         ##early stopping
                         y_prob, y_true = [],[]
                         for batch_idx, samples in enumerate(val_loader):
+                            #print(samples)
+                            
                             prob, true = self.train_step(samples,training = False, num_gene = input_size_gene)
-
+                            #print(true, prob)
                             y_prob.extend(prob.detach().cpu().numpy())
                             y_true.extend(true.cpu().numpy())
-
+                        #print(y_true, y_prob)
                         val_auc, _, _, _, _ = self.evalutaion(y_true,y_prob)
 
                         early_stopping(val_auc, self.model, epoch)
@@ -1048,11 +1049,11 @@ class train_kfold3:
                                             'Test_Recall': [test_recall], 'Test_F1': [test_f1], 'Test_PrAUC': [test_pr_auc]})], ignore_index=True)
                     
                     ##SHAP
-                    shap_values = self.get_shap_values(x_train[:,kept_indice], x_test[:,kept_indice],num_gene=input_size_gene)
-                    shap_ls.append(shap_values)
-                    x_tests.append(x_test)
-        with open("shap.pkl", 'wb') as file:
-            pickle.dump(shap_ls, file)
+                    # shap_values = self.get_shap_values(x_train[:,kept_indice], x_test[:,kept_indice],num_gene=input_size_gene)
+                    # shap_ls.append(shap_values)
+                    # x_tests.append(x_test)
+        # with open("shap.pkl", 'wb') as file:
+        #     pickle.dump(shap_ls, file)
         with open("mi_feat_idx.pkl", 'wb') as file:
             pickle.dump(sel_feat_idx, file)
         return result
@@ -1061,7 +1062,9 @@ class train_kfold3:
         data,label = batch_item
         data = data.to(self.device)
         input_gene = data[:,:num_gene]
+        #print(input_gene.shape)
         input_meth = data[:,num_gene:]
+        #print(input_meth.shape)
         label = label.to(self.device)
         if training is True:
             self.model.train()
@@ -1071,7 +1074,6 @@ class train_kfold3:
                 true = torch.reshape(label,(-1,))
                 loss = self.criterion(out,true)
                 prob = out[:,1]                
-                
             loss.backward()
             self.optimizer.step()
             return prob, true
