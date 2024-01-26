@@ -31,7 +31,7 @@ from tqdm import tqdm
 # In[74]:
 
 
-path_fn = "../../data/pathway_gobp_new.csv"
+path_fn = "../../data/pathway_kegg_new.csv"
 meth_fn = "../../data/beta.by.intensity.all.regions.csv"
 label_fn = "../../data/label.csv"
 
@@ -91,7 +91,7 @@ for fold, (train_index, test_index) in enumerate(kfold.split(x_data, y_data)):
     sel_path_cpg_idx1 = [all_cpgs.index(value) for value in tqdm(path_cpgs)]
     sel_path_cpg_idx2 = [all_path_cpgs.index(value) for value in tqdm(path_cpgs)]
     all_sel_idx = sel_path_cpg_idx1 + [x + num_cpgs for x in sel_feats_idx]
-    sel_feat_idx.update({f'fold{fold}': [all_sel_idx, sel_path_cpg_idx2]})
+    sel_feat_idx.update({f'fold{fold}': [all_sel_idx, sel_path_cpg_idx2, sel_feats_idx]})
     
     dict_data = {"train": train_index, "test": test_index}
     with open(f"../../data/folds/fold_{fold+1}.pkl", 'wb') as file:
@@ -101,6 +101,6 @@ for fold, (train_index, test_index) in enumerate(kfold.split(x_data, y_data)):
 # In[79]:
 
 
-with open("mi_feat_idx.pkl", 'wb') as file:
+with open("mi_feat_idx_kegg.pkl", 'wb') as file:
     pickle.dump(sel_feat_idx, file)
 
